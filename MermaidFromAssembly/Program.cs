@@ -1,10 +1,5 @@
-﻿using System;
-using System.IO;
-using System.Linq;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace MermaidFromAssembly
 {
@@ -160,15 +155,18 @@ namespace MermaidFromAssembly
                 if (member is MethodInfo method && !method.IsSpecialName)
                 {
                     var parameters = method.GetParameters();
-                    string paramList = string.Join(", ", parameters.Select(p => $"{p.ParameterType.Name} {p.Name}"));
+                    string paramList = string.Join(", ", parameters.Select(p => $"{SanitizeName(p.ParameterType)} {p.Name}"));
                     string returnType = SanitizeName(method.ReturnType);
                     sb.AppendLine($"    {accessModifier}{returnType} {memberName}({paramList})");
                 }
                 // For properties
                 else if (member is PropertyInfo property)
                 {
+                    string accessors = property.CanWrite && property.CanRead ? "(get; set;)" :
+                                       property.CanRead ? "(get;)" :
+                                       property.CanWrite ? "(set;)" : "";
                     string propertyType = SanitizeName(property.PropertyType);
-                    sb.AppendLine($"    {accessModifier}{propertyType} {memberName}");
+                    sb.AppendLine($"    {accessModifier}{propertyType} {memberName}  {accessors}");
                 }
                 // For fields
                 else if (member is FieldInfo field)
@@ -178,7 +176,7 @@ namespace MermaidFromAssembly
                     {
                         if (memberName != "value__")
                         {
-                            sb.AppendLine($"    {memberName} = {field.GetValue(null)}");
+                            sb.AppendLine($"    {memberName} = {field.GetRawConstantValue()}");
                         }
                     }
                     else
@@ -236,8 +234,10 @@ namespace MermaidFromAssembly
                  typeof(ICollection<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
                  typeof(IList<>).IsAssignableFrom(targetType.GetGenericTypeDefinition())))
             {
-                targetType = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length-1];
+                var targetType2 = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length-1];
+                relationship = relationship.Replace(SanitizeName(targetType), SanitizeName(targetType2));
                 relationship = relationship.Replace("Has", "Has many");
+                targetType = targetType2;
             }
 
             // Check if target type is from the same assembly and is not primitive or from System namespace
@@ -273,9 +273,16 @@ namespace MermaidFromAssembly
             if (t.IsGenericType)
             {
                 stringBuilder.Append(t.Name.Substring(0, t.Name.IndexOf('`')));
-                stringBuilder.Append("<");
+                stringBuilder.Append("&lt;");
                 stringBuilder.Append(string.Join(", ", t.GetGenericArguments().Select(SanitizeName)));
-                stringBuilder.Append(">");
+                stringBuilder.Append("&gt;");
+            }
+            else if (t.IsGenericTypeDefinition)
+            {
+                stringBuilder.Append(t.Name.Substring(0, t.Name.IndexOf('`')));
+                stringBuilder.Append("&lt;");
+                stringBuilder.Append(string.Join(", ", t.GetGenericArguments().Select(SanitizeName)));
+                stringBuilder.Append("&gt;");
             }
             else
             {
