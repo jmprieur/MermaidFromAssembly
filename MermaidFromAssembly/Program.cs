@@ -162,11 +162,11 @@ namespace MermaidFromAssembly
                 // For properties
                 else if (member is PropertyInfo property)
                 {
-                    string accessors = property.CanWrite && property.CanRead ? "(get; set;)" :
-                                       property.CanRead ? "(get;)" :
-                                       property.CanWrite ? "(set;)" : "";
+                    string accessors = property.CanWrite && property.CanRead ? "&lt;&lt;rw&gt;&gt;" :
+                                       property.CanRead ? "&lt;&lt;ro&gt;&gt;" :
+                                       property.CanWrite ? "&lt;&lt;wo&gt;&gt;" : "";
                     string propertyType = SanitizeName(property.PropertyType);
-                    sb.AppendLine($"    {accessModifier}{propertyType} {memberName}  {accessors}");
+                    sb.AppendLine($"    {accessors} {accessModifier}{propertyType} {memberName}");
                 }
                 // For fields
                 else if (member is FieldInfo field)
@@ -205,7 +205,7 @@ namespace MermaidFromAssembly
                         continue;
 
                     AddRelationshipIfSameAssembly(sb, assembly, type, property.PropertyType,
-                                               $"{SanitizeName(type)} --> {SanitizeName(property.PropertyType)} : Has",
+                                               $"{SanitizeName(type)} --> \"{property.Name}\" {SanitizeName(property.PropertyType)} : Has",
                                                processedRelationships);
                 }
 
@@ -217,7 +217,7 @@ namespace MermaidFromAssembly
                         continue;
 
                     AddRelationshipIfSameAssembly(sb, assembly, type, field.FieldType,
-                                              $"{SanitizeName(type)} --> {SanitizeName(field.FieldType)} : Has",
+                                              $"{SanitizeName(type)} --> \"{field.Name}\" {SanitizeName(field.FieldType)} : Has",
                                               processedRelationships);
                 }
             }
@@ -238,6 +238,11 @@ namespace MermaidFromAssembly
                 relationship = relationship.Replace(SanitizeName(targetType), SanitizeName(targetType2));
                 relationship = relationship.Replace("Has", "Has many");
                 targetType = targetType2;
+            }
+
+            if (targetType.IsValueType)
+            {
+                relationship = relationship.Replace("-->", "*--");
             }
 
             // Check if target type is from the same assembly and is not primitive or from System namespace
@@ -283,6 +288,25 @@ namespace MermaidFromAssembly
                 stringBuilder.Append("&lt;");
                 stringBuilder.Append(string.Join(", ", t.GetGenericArguments().Select(SanitizeName)));
                 stringBuilder.Append("&gt;");
+            }
+            else if (t.IsArray)
+            {
+                stringBuilder.Append(SanitizeName(t.GetElementType()));
+                stringBuilder.Append("[]");
+            }
+            else if (t.IsNested)
+            {
+                stringBuilder.Append(SanitizeName(t.DeclaringType));
+                stringBuilder.Append(".");
+                stringBuilder.Append(t.Name);
+            }
+            else if (t.FullName== "System.String")
+            {
+                stringBuilder.Append("string");
+            }
+            else if (t.FullName == "System.Boolean")
+            {
+                stringBuilder.Append("bool");
             }
             else
             {
