@@ -14,7 +14,7 @@ namespace MermaidFromAssembly
     {
         static void Main(string[] args)
         {
-            args = [@"D:\gh\abstractions\microsoft-identity-abstractions-for-dotnet\src\Microsoft.Identity.Abstractions\bin\Debug\net8.0\Microsoft.Identity.Abstractions.dll"];
+            // args = [@"D:\gh\abstractions\microsoft-identity-abstractions-for-dotnet\src\Microsoft.Identity.Abstractions\bin\Debug\net8.0\Microsoft.Identity.Abstractions.dll"];
 
             //args = [@"D:\gh\mise\MISE\tests\Experimental\MiseAuthN\Mise.Authentication.Tests\bin\Debug\net8.0\Mise.Authentication.dll" ];
             if (args.Length == 0)
@@ -24,6 +24,8 @@ namespace MermaidFromAssembly
             }
 
             string assemblyPath = args[0];
+            string? categoryFilePath = args.Length > 1 ? args[1] : null;
+
             try
             {
                 // Load the assembly
@@ -34,8 +36,14 @@ namespace MermaidFromAssembly
                     .GroupBy(t => t.Namespace ?? "Global")
                     .ToDictionary(g => g.Key, g => g.ToList());
 
+                // Read categories if a category file is provided
+                Dictionary<string, List<string>> categories =
+                    !string.IsNullOrEmpty(categoryFilePath) ?
+                    ReadCategoriesFromFile(categoryFilePath) :
+                    new Dictionary<string, List<string>>();
+
                 // Generate the mermaid diagram
-                string mermaidDiagram = GenerateMermaidDiagram(assembly, typesByNamespace);
+                string mermaidDiagram = GenerateMermaidDiagram(assembly, typesByNamespace, categories);
 
                 // Save to file in c:\temp with assembly name and .md extension
                 string fileName = Path.GetFileNameWithoutExtension(assemblyPath);
@@ -50,7 +58,9 @@ namespace MermaidFromAssembly
             }
         }
 
-        static string GenerateMermaidDiagram(Assembly assembly, Dictionary<string, List<Type>> typesByNamespace)
+        static string GenerateMermaidDiagram(Assembly assembly,
+                                          Dictionary<string, List<Type>> typesByNamespace,
+                                          Dictionary<string, List<string>> categories)
         {
             StringBuilder sb = new StringBuilder();
 
@@ -66,33 +76,78 @@ namespace MermaidFromAssembly
                 string namespaceName = namespaceGroup.Key;
                 List<Type> types = namespaceGroup.Value;
 
-                // Add namespace as a comment for grouping
-                sb.AppendLine($"    namespace {namespaceName}{{");
+                // Group types by category within this namespace
+                Dictionary<string, List<Type>> typesByCategory = new Dictionary<string, List<Type>>();
+                typesByCategory["Uncategorized"] = new List<Type>();
 
-                // Process each type in the namespace
+                // Initialize categories
+                foreach (var category in categories.Keys)
+                {
+                    typesByCategory[category] = new List<Type>();
+                }
+
+                // Assign types to categories
                 foreach (Type type in types)
                 {
-                    // Define the class/interface
-                    string typeDefinition = type.IsEnum ? "<<enum>>" : type.IsInterface ? "<<interface>>" : (type.IsAbstract ? "<<abstract>>" : "");
-                    if (!string.IsNullOrEmpty(typeDefinition))
+                    bool categorized = false;
+                    foreach (var category in categories)
                     {
-                        sb.AppendLine($"    class {SanitizeName(type)} {{ {typeDefinition}");
+                        if (category.Value.Contains(type.Name))
+                        {
+                            typesByCategory[category.Key].Add(type);
+                            categorized = true;
+                            break;
+                        }
+                    }
+
+                    if (!categorized)
+                    {
+                        typesByCategory["Uncategorized"].Add(type);
+                    }
+                }
+
+                // Process each category
+                foreach (var categoryGroup in typesByCategory)
+                {
+                    if (!categoryGroup.Value.Any())
+                        continue;
+
+                    if (categoryGroup.Key != "Uncategorized")
+                    {
+                        // Add subnamespace for category
+                        sb.AppendLine($"        namespace {categoryGroup.Key} {{");
                     }
                     else
                     {
-                        sb.AppendLine($"    class {SanitizeName(type)} {{");
+                        // Add namespace as a comment for grouping
+                        sb.AppendLine($"    namespace {namespaceName} {{");
                     }
 
-                    // Add members to the class
-                    AddMembers(sb, type, assembly);
-                    sb.AppendLine("    }");
+
+                    // Process each type in the category
+                    foreach (Type type in categoryGroup.Value)
+                    {
+                        // Define the class/interface
+                        string typeDefinition = type.IsEnum ? "<<enum>>" : type.IsInterface ? "<<interface>>" : (type.IsAbstract ? "<<abstract>>" : "");
+                        if (!string.IsNullOrEmpty(typeDefinition))
+                        {
+                            sb.AppendLine($"    class {SanitizeName(type)} {{ {typeDefinition}");
+                        }
+                        else
+                        {
+                            sb.AppendLine($"    class {SanitizeName(type)} {{");
+                        }
+
+                        // Add members to the class
+                        AddMembers(sb, type, assembly);
+                        sb.AppendLine("    }");
+                    }
+
+                    sb.AppendLine(" }");
+                    sb.AppendLine();
                 }
 
-                sb.AppendLine($"    }}");
-
-
-
-                // Process each type in the namespace
+                // Process relationships for this namespace
                 foreach (Type type in types)
                 {
                     // Add inheritance relationship
@@ -172,7 +227,7 @@ namespace MermaidFromAssembly
                 else if (member is FieldInfo field)
                 {
                     string fieldType = SanitizeName(field.FieldType);
-                    if (member.DeclaringType.IsEnum)
+                    if (member.DeclaringType != null && member.DeclaringType.IsEnum)
                     {
                         if (memberName != "value__")
                         {
@@ -234,7 +289,7 @@ namespace MermaidFromAssembly
                  typeof(ICollection<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
                  typeof(IList<>).IsAssignableFrom(targetType.GetGenericTypeDefinition())))
             {
-                var targetType2 = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length-1];
+                var targetType2 = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length - 1];
                 relationship = relationship.Replace(SanitizeName(targetType), SanitizeName(targetType2));
                 relationship = relationship.Replace("Has", "Has many");
                 targetType = targetType2;
@@ -272,8 +327,13 @@ namespace MermaidFromAssembly
             };
         }
 
-        static string SanitizeName(Type t)
+        static string SanitizeName(Type? t)
         {
+            if (t == null)
+            {
+                return string.Empty;
+            }
+
             StringBuilder stringBuilder = new StringBuilder();
             if (t.IsGenericType)
             {
@@ -300,7 +360,7 @@ namespace MermaidFromAssembly
                 stringBuilder.Append(".");
                 stringBuilder.Append(t.Name);
             }
-            else if (t.FullName== "System.String")
+            else if (t.FullName == "System.String")
             {
                 stringBuilder.Append("string");
             }
@@ -315,6 +375,50 @@ namespace MermaidFromAssembly
 
             return stringBuilder.ToString();
         }
+
+        // Read and parse the category file
+        static Dictionary<string, List<string>> ReadCategoriesFromFile(string? categoryFilePath)
+        {
+            Dictionary<string, List<string>> categories = new Dictionary<string, List<string>>();
+
+            if (categoryFilePath == null || !File.Exists(categoryFilePath))
+                return categories;
+
+            string currentCategory = "";
+
+            foreach (var line in File.ReadAllLines(categoryFilePath))
+            {
+                string trimmedLine = line.Trim();
+
+                if (string.IsNullOrWhiteSpace(trimmedLine))
+                    continue;
+
+                if (trimmedLine.StartsWith("-") || trimmedLine.StartsWith("*"))
+                {
+                    // This is a class entry
+                    if (!string.IsNullOrEmpty(currentCategory))
+                    {
+                        string className = trimmedLine.Substring(1).Trim();
+                        if (!categories[currentCategory].Contains(className))
+                        {
+                            categories[currentCategory].Add(className);
+                        }
+                    }
+                }
+                else
+                {
+                    // This is a category
+                    currentCategory = trimmedLine;
+                    if (!categories.ContainsKey(currentCategory))
+                    {
+                        categories[currentCategory] = new List<string>();
+                    }
+                }
+            }
+
+            return categories;
+        }
+
     }
 
     // Extension methods for checking access modifiers

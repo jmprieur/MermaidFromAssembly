@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
+    },
+    "Abstractions": {
+      "commandName": "Project",
+      "commandLineArgs": "D:\\gh\\abstractions\\microsoft-identity-abstractions-for-dotnet\\src\\Microsoft.Identity.Abstractions\\bin\\Debug\\net8.0\\Microsoft.Identity.Abstractions.dll D:\\gh\\abstractions\\microsoft-identity-abstractions-for-dotnet\\src\\Microsoft.Identity.Abstractions\\Structure.txt"
+    }
+  }
+}
