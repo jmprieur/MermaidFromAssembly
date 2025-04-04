@@ -19,9 +19,9 @@ namespace MermaidFromAssembly
             //args = [@"D:\gh\mise\MISE\tests\Experimental\MiseAuthN\Mise.Authentication.Tests\bin\Debug\net8.0\Mise.Authentication.dll" ];
             if (args.Length == 0)
             {
-                args = ["D:\\gh\\sal\\sal1\\test\\Microsoft.IdentityModel.S2S.Configuration.Tests\\bin\\Debug\\net8.0\\Microsoft.IdentityModel.S2S.Configuration.dll"];
-                Console.WriteLine("Please provide the path to an assembly as an argument.");
-                return;
+                args = ["D:\\gh\\sal\\sal1\\test\\NewConfigTests\\bin\\Debug\\net8.0\\NewConfigTests.dll"];
+                //Console.WriteLine("Please provide the path to an assembly as an argument.");
+                //return;
             }
 
             string assemblyPath = args[0];
@@ -290,7 +290,8 @@ namespace MermaidFromAssembly
                 (typeof(IEnumerable<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
                  typeof(ICollection<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
                  typeof(IList<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
-                 typeof(IDictionary<,>).IsAssignableFrom(targetType.GetGenericTypeDefinition())
+                 typeof(IDictionary<,>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
+                 typeof(System.Collections.IEnumerable).IsAssignableFrom(targetType.GetGenericTypeDefinition())
                  ))
             {
                 var targetType2 = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length - 1];
