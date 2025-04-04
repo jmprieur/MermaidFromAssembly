@@ -19,6 +19,7 @@ namespace MermaidFromAssembly
             //args = [@"D:\gh\mise\MISE\tests\Experimental\MiseAuthN\Mise.Authentication.Tests\bin\Debug\net8.0\Mise.Authentication.dll" ];
             if (args.Length == 0)
             {
+                args = ["D:\\gh\\sal\\sal1\\test\\Microsoft.IdentityModel.S2S.Configuration.Tests\\bin\\Debug\\net8.0\\Microsoft.IdentityModel.S2S.Configuration.dll"];
                 Console.WriteLine("Please provide the path to an assembly as an argument.");
                 return;
             }
@@ -67,6 +68,7 @@ namespace MermaidFromAssembly
             // Start the mermaid class diagram
             sb.AppendLine("```mermaid");
             sb.AppendLine("classDiagram");
+            sb.AppendLine("direction LR");
 
             HashSet<string> processedRelationships = new HashSet<string>();
 
@@ -287,7 +289,9 @@ namespace MermaidFromAssembly
             if (targetType.IsGenericType &&
                 (typeof(IEnumerable<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
                  typeof(ICollection<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
-                 typeof(IList<>).IsAssignableFrom(targetType.GetGenericTypeDefinition())))
+                 typeof(IList<>).IsAssignableFrom(targetType.GetGenericTypeDefinition()) ||
+                 typeof(IDictionary<,>).IsAssignableFrom(targetType.GetGenericTypeDefinition())
+                 ))
             {
                 var targetType2 = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length - 1];
                 relationship = relationship.Replace(SanitizeName(targetType), SanitizeName(targetType2));
