@@ -12,6 +12,9 @@ namespace MermaidFromAssembly
     // of the same name as the assembly but with extension .md
     internal class Program
     {
+        private static bool keepObsolete = false;
+        private static bool oneDiagramPerNamespace = false;
+
         static void Main(string[] args)
         {
             // args = [@"D:\gh\abstractions\microsoft-identity-abstractions-for-dotnet\src\Microsoft.Identity.Abstractions\bin\Debug\net8.0\Microsoft.Identity.Abstractions.dll"];
@@ -23,6 +26,9 @@ namespace MermaidFromAssembly
                 //Console.WriteLine("Please provide the path to an assembly as an argument.");
                 //return;
             }
+
+            keepObsolete = args.Any(a => a == "--keep-obsolete");
+            oneDiagramPerNamespace = args.Any(a => a == "--one-diagram-per-namespace");
 
             string assemblyPath = args[0];
             string? categoryFilePath = args.Length > 1 ? args[1] : null;
@@ -65,11 +71,13 @@ namespace MermaidFromAssembly
         {
             StringBuilder sb = new StringBuilder();
 
-            // Start the mermaid class diagram
-            sb.AppendLine("```mermaid");
-            sb.AppendLine("classDiagram");
-            sb.AppendLine("direction LR");
-
+            if (!oneDiagramPerNamespace)
+            {
+                // Start the mermaid class diagram
+                sb.AppendLine("```mermaid");
+                sb.AppendLine("classDiagram");
+                sb.AppendLine("direction LR");
+            }
             HashSet<string> processedRelationships = new HashSet<string>();
 
             // Process each namespace
@@ -114,6 +122,15 @@ namespace MermaidFromAssembly
                     if (!categoryGroup.Value.Any())
                         continue;
 
+                    if (oneDiagramPerNamespace)
+                    {
+                        sb.AppendLine("## " + ((categoryGroup.Key != "Uncategorized") ? "Namespace: "+namespaceName : namespaceName));
+
+                        sb.AppendLine("```mermaid");
+                        sb.AppendLine("classDiagram");
+                        sb.AppendLine("direction LR");
+                    }
+
                     if (categoryGroup.Key != "Uncategorized")
                     {
                         // Add subnamespace for category
@@ -129,6 +146,12 @@ namespace MermaidFromAssembly
                     // Process each type in the category
                     foreach (Type type in categoryGroup.Value)
                     {
+                        // Check for Obsolete attribute
+                        bool isObsolete = type.GetCustomAttribute<ObsoleteAttribute>() != null;
+                        if (isObsolete && !keepObsolete)
+                            continue;
+
+
                         // Define the class/interface
                         string typeDefinition = type.IsEnum ? "<<enum>>" : type.IsInterface ? "<<interface>>" : (type.IsAbstract ? "<<abstract>>" : "");
                         if (!string.IsNullOrEmpty(typeDefinition))
@@ -179,14 +202,22 @@ namespace MermaidFromAssembly
                     }
                 }
 
+                if (oneDiagramPerNamespace)
+                {
+                    sb.AppendLine("```");
+                }
+
                 sb.AppendLine();
             }
 
             // Add member relationships between types
             AddTypeRelationships(sb, assembly, typesByNamespace, processedRelationships);
 
-            // End the mermaid diagram
-            sb.AppendLine("```");
+            if (!oneDiagramPerNamespace)
+            {
+                // End the mermaid diagram
+                sb.AppendLine("```");
+            }
             return sb.ToString();
         }
 
@@ -208,13 +239,17 @@ namespace MermaidFromAssembly
                 string memberType = GetMemberType(member);
                 string memberName = member.Name;
 
+                // Check for Obsolete attribute
+                bool isObsolete = member.GetCustomAttribute<ObsoleteAttribute>() != null;
+                string obsoleteTag = isObsolete ? " &lt;&lt;Obsolete&gt;&gt;" : "";
+
                 // For methods, include parameters
                 if (member is MethodInfo method && !method.IsSpecialName)
                 {
                     var parameters = method.GetParameters();
                     string paramList = string.Join(", ", parameters.Select(p => $"{SanitizeName(p.ParameterType)} {p.Name}"));
                     string returnType = SanitizeName(method.ReturnType);
-                    sb.AppendLine($"    {accessModifier}{returnType} {memberName}({paramList})");
+                    sb.AppendLine($"    {obsoleteTag}{accessModifier}{returnType} {memberName}({paramList})");
                 }
                 // For properties
                 else if (member is PropertyInfo property)
@@ -223,7 +258,7 @@ namespace MermaidFromAssembly
                                        property.CanRead ? "&lt;&lt;ro&gt;&gt;" :
                                        property.CanWrite ? "&lt;&lt;wo&gt;&gt;" : "";
                     string propertyType = SanitizeName(property.PropertyType);
-                    sb.AppendLine($"    {accessors} {accessModifier}{propertyType} {memberName}");
+                    sb.AppendLine($"    {accessors}{obsoleteTag} {accessModifier}{propertyType} {memberName}");
                 }
                 // For fields
                 else if (member is FieldInfo field)
@@ -238,7 +273,7 @@ namespace MermaidFromAssembly
                     }
                     else
                     {
-                        sb.AppendLine($"    {accessModifier}{fieldType} {memberName}");
+                        sb.AppendLine($"    {accessModifier}{obsoleteTag}{fieldType} {memberName}");
                     }
                 }
                 // Skip constructors, events, etc.
@@ -261,7 +296,7 @@ namespace MermaidFromAssembly
                                                            property.GetMethod?.IsProtected() == true))
                         continue;
 
-                    AddRelationshipIfSameAssembly(sb, assembly, type, property.PropertyType,
+                    AddRelationshipIfSameAssembly(sb, assembly, type, property.PropertyType, property.GetCustomAttribute<ObsoleteAttribute>() != null,
                                                $"{SanitizeName(type)} --> \"{property.Name}\" {SanitizeName(property.PropertyType)} : Has",
                                                processedRelationships);
                 }
@@ -273,15 +308,15 @@ namespace MermaidFromAssembly
                     if (field.DeclaringType != type || !(field.IsPublic || field.IsFamily))
                         continue;
 
-                    AddRelationshipIfSameAssembly(sb, assembly, type, field.FieldType,
+                    AddRelationshipIfSameAssembly(sb, assembly, type, field.FieldType, field.GetCustomAttribute<ObsoleteAttribute>() != null,
                                               $"{SanitizeName(type)} --> \"{field.Name}\" {SanitizeName(field.FieldType)} : Has",
                                               processedRelationships);
                 }
             }
         }
 
-        static void AddRelationshipIfSameAssembly(StringBuilder sb, Assembly assembly,
-                                              Type sourceType, Type targetType,
+        static void AddRelationshipIfSameAssembly(StringBuilder sb, Assembly assembly, 
+                                              Type sourceType, Type targetType, bool isObsolete,
                                               string relationship,
                                               HashSet<string> processedRelationships)
         {
@@ -297,6 +332,8 @@ namespace MermaidFromAssembly
                 var targetType2 = targetType.GetGenericArguments()[targetType.GetGenericArguments().Length - 1];
                 relationship = relationship.Replace(SanitizeName(targetType), SanitizeName(targetType2));
                 relationship = relationship.Replace("Has", "Has many");
+                if (isObsolete)
+                    relationship += " obsolete";
                 targetType = targetType2;
             }
 
@@ -344,14 +381,14 @@ namespace MermaidFromAssembly
             {
                 stringBuilder.Append(t.Name.Substring(0, t.Name.IndexOf('`')));
                 stringBuilder.Append("&lt;");
-                stringBuilder.Append(string.Join(", ", t.GetGenericArguments().Select(SanitizeName)));
+                stringBuilder.Append(string.Join("_", t.GetGenericArguments().Select(SanitizeName)));
                 stringBuilder.Append("&gt;");
             }
             else if (t.IsGenericTypeDefinition)
             {
                 stringBuilder.Append(t.Name.Substring(0, t.Name.IndexOf('`')));
                 stringBuilder.Append("&lt;");
-                stringBuilder.Append(string.Join(", ", t.GetGenericArguments().Select(SanitizeName)));
+                stringBuilder.Append(string.Join("_", t.GetGenericArguments().Select(SanitizeName)));
                 stringBuilder.Append("&gt;");
             }
             else if (t.IsArray)
@@ -359,12 +396,14 @@ namespace MermaidFromAssembly
                 stringBuilder.Append(SanitizeName(t.GetElementType()));
                 stringBuilder.Append("[]");
             }
+/*
             else if (t.IsNested)
             {
                 stringBuilder.Append(SanitizeName(t.DeclaringType));
                 stringBuilder.Append(".");
                 stringBuilder.Append(t.Name);
             }
+*/
             else if (t.FullName == "System.String")
             {
                 stringBuilder.Append("string");

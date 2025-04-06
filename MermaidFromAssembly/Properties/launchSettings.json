@@ -10,6 +10,10 @@
     },
     "Default": {
       "commandName": "Project"
+    },
+    "Mise AuthN": {
+      "commandName": "Project",
+      "commandLineArgs": "D:\\gh\\mise\\MISE\\tests\\Experimental\\Mise.AuthN.MigratedTests\\bin\\Debug\\net8.0\\\\Mise.Authentication.dll --one-diagram-per-namespace"
     }
   }
 }
