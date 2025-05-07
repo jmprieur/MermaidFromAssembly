@@ -68,17 +68,17 @@ MermaidFromAssembly.exe "Path\To\Your\Assembly.dll" "categories.txt" --keep-obso
 Example output diagram structure:
 ```mermaid
 classDiagram
-direction LR
+direction TD
     namespace YourNamespace {
         class Class1 {
             +string Property1
             #void Method1(int param)
         }
-        class Class2 {
+        class Interface2 {
             <<interface>>
         }
-        Class1 --|> Class2 : Implements
     }
+        Class1 --|> Interface2 : Implements
 ```
 
 ## Diagram Features
